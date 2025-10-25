@@ -5,19 +5,18 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 import re
-import os # Import the 'os' module
+import os
 
-# Vercel will detect this 'app' object
+# This 'app' object is what Vercel interacts with.
 app = Flask(__name__)
 CORS(app)
 
-# --- SECURELY GET EMAIL CONFIGURATION FROM ENVIRONMENT VARIABLES ---
-# We will set these in the Vercel dashboard, NOT here in the code.
+# --- Securely get email credentials from Vercel's Environment Variables ---
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
 SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
 RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
 
-# --- All your validation functions remain the same ---
+# --- Validation Functions (No changes needed here) ---
 def validate_email(email):
     pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
     return re.match(pattern, email) is not None
@@ -44,12 +43,12 @@ def validate_form_data(data):
     if not validate_age(data.get('age')): errors.append("You must be at least 18.")
     return errors
 
-# --- IMPORTANT: FLASK ROUTE MODIFICATION ---
-# We combine both routes into one function that handles all requests.
-# The `vercel.json` file will direct traffic correctly.
+
+# --- CRITICAL FIX: THE FLASK ROUTE ---
+# This decorator MUST match the URL from your JavaScript fetch call.
+# It tells Flask: "When a POST request comes to /sendmail, run this function."
 @app.route('/sendmail', methods=['POST'])
 def send_mail_route():
-    # Your form submission logic is perfect and does not need to change.
     try:
         data = request.get_json()
     except Exception:
@@ -86,4 +85,4 @@ def send_mail_route():
         print(f"EMAIL SENDING FAILED: {e}")
         return jsonify({"status": "error", "message": "Internal server error."}), 500
 
-# Note: The if __name__ == '__main__': block is removed. Vercel handles this.
+# There should be no other @app.route() decorators in this file.
