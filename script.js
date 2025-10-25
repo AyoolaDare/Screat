@@ -1,129 +1,71 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // ===============================
-    // 🌀 Animate elements on scroll
-    // ===============================
-    const animateOnScroll = () => {
-        const elements = document.querySelectorAll('.animate-fade-in');
-        elements.forEach((el) => {
-            const elementPosition = el.getBoundingClientRect().top;
-            const screenPosition = window.innerHeight / 1.3;
-            if (elementPosition < screenPosition) {
-                el.style.opacity = '1';
-                el.style.transform = 'translateY(0)';
-            }
-        });
-    };
 
-    window.addEventListener('scroll', animateOnScroll);
-    animateOnScroll(); // Initialize on load
-
-
-    // ===============================
-    // 📩 Form submission handling
-    // ===============================
     const form = document.getElementById('application-form');
-    if (form) {
-        form.addEventListener('submit', async function(e) {
-            e.preventDefault();
 
-            // Spinner + Button state
+    if (form) {
+        console.log("SUCCESS: application-form found. Attaching event listener."); // <-- DEBUG LINE 1
+
+        form.addEventListener('submit', async function(e) {
+            // This is the most important line. It stops the page from reloading.
+            e.preventDefault();
+            console.log("SUCCESS: Form submitted, preventDefault() was called."); // <-- DEBUG LINE 2
+
             const submitBtn = form.querySelector('button[type="submit"]');
             const spinner = document.getElementById('spinner');
             const submitText = document.getElementById('submit-text');
-            const messageBox = document.createElement('div');
-            messageBox.classList.add('message-box');
-            form.appendChild(messageBox);
 
+            let messageBox = form.querySelector('.message-box');
+            if (!messageBox) {
+                messageBox = document.createElement('div');
+                messageBox.className = 'message-box';
+                messageBox.style.cssText = 'padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-weight: 500;';
+                form.insertBefore(messageBox, submitBtn);
+            }
+
+            messageBox.textContent = '';
             submitText.textContent = 'Processing...';
             spinner.classList.remove('hidden');
             submitBtn.disabled = true;
 
-            // ===============================
-            // 🧾 Validate required fields
-            // ===============================
-            const requiredFields = form.querySelectorAll('[required]');
-            let isValid = true;
-
-            requiredFields.forEach(field => {
-                if (!field.value.trim()) {
-                    field.classList.add('border-red-500');
-                    isValid = false;
-                } else {
-                    field.classList.remove('border-red-500');
-                }
-            });
-
-            if (!isValid) {
-                alert('Please fill in all required fields marked with *');
-                spinner.classList.add('hidden');
-                submitText.textContent = 'Submit Application';
-                submitBtn.disabled = false;
-                return;
-            }
-
-            // ===============================
-            // 🔞 Validate age
-            // ===============================
-            const ageInput = document.getElementById('age');
-            if (ageInput && ageInput.value < 18) {
-                alert('You must be at least 18 years old to apply');
-                ageInput.classList.add('border-red-500');
-                spinner.classList.add('hidden');
-                submitText.textContent = 'Submit Application';
-                submitBtn.disabled = false;
-                return;
-            } else if (ageInput) {
-                ageInput.classList.remove('border-red-500');
-            }
-
-            // ===============================
-            // 📨 Send to Flask backend
-            // ===============================
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
 
             try {
-                const response = await fetch('http://127.0.0.1:5000/sendmail', {
+                const response = await fetch('/sendmail', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
                 });
+                const responseData = await response.json();
 
                 if (response.ok) {
-                    messageBox.textContent = 'Message sent successfully!';
-                    messageBox.style.color = 'green';
+                    messageBox.textContent = '✅ ' + responseData.message;
+                    messageBox.style.color = '#16a34a';
+                    messageBox.style.backgroundColor = '#dcfce7';
                     form.reset();
-
+                    
+                    // This is the redirect command
                     setTimeout(() => {
-                        window.location.href = 'thank_you.html';
-                    }, 1000);
+                        window.location.href = responseData.redirect || '/thank_you.html';
+                    }, 1500);
+
                 } else {
-                    const error = await response.json();
-                    messageBox.textContent = error.message || 'Failed to send message.';
-                    messageBox.style.color = 'red';
+                    messageBox.textContent = '❌ ' + responseData.message;
+                    messageBox.style.color = '#dc2626';
+                    messageBox.style.backgroundColor = '#fee2e2';
                 }
             } catch (error) {
-                console.error('Error:', error);
-                messageBox.textContent = 'Network error. Please check your connection.';
-                messageBox.style.color = 'red';
+                console.error('Submission Error:', error);
+                messageBox.textContent = '❌ Network error. Please check your connection.';
+                messageBox.style.color = '#dc2626';
+                messageBox.style.backgroundColor = '#fee2e2';
             } finally {
                 spinner.classList.add('hidden');
                 submitText.textContent = 'Submit Application';
                 submitBtn.disabled = false;
             }
         });
+    } else {
+        console.error("ERROR: Could not find form with ID 'application-form'.");
     }
-
-
-    // ===============================
-    // 🌐 Smooth scrolling for anchors
-    // ===============================
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
-            e.preventDefault();
-            document.querySelector(this.getAttribute('href')).scrollIntoView({
-                behavior: 'smooth'
-            });
-        });
-    });
 });
