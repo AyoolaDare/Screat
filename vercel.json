@@ -2,14 +2,15 @@
   "version": 2,
   "builds": [
     {
-      "src": "/api/index.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/sendmail",
-      "dest": "/api/index.py"
+      "methods": ["POST"],
+      "dest": "api/index.py"
     },
     {
       "src": "/(.*)",
