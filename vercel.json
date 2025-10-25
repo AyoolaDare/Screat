@@ -10,7 +10,7 @@
     {
       "src": "/sendmail",
       "methods": ["POST"],
-      "dest": "api/index.py"
+      "dest": "/api/index.py"
     },
     {
       "src": "/(.*)",
